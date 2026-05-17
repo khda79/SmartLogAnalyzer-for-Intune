@@ -22,6 +22,9 @@ Built by [WorkplaceCloudHub](https://workplacecloudhub.com).
 - Parse Windows Event Logs from EVTX files.
 - Report firewall, battery, certificates, installed apps, drivers, WiFi and Autopatch data.
 - Run local health checks for BitLocker, Defender, storage, performance and Entra join.
+- Generate a local "Top 5 actions" view, health score, root cause hints and unified timeline.
+- Search across local insights, root causes, WUfB settings and timeline events.
+- Export an anonymized copy of a diagnostic ZIP for support sharing.
 - Export a standalone HTML report with no external dependencies.
 - Optionally use Claude, OpenAI or local Ollama for AI-assisted diagnostics.
 
@@ -57,6 +60,7 @@ python SmartLogAnalyzer.py
 4. Select `Analyze Intune DiagLogs ZIP`.
 5. Browse the analysis tabs.
 6. Use `Export HTML Report` when you need a portable report.
+7. Use `Export anonymized ZIP` when you need to share a redacted diagnostic archive.
 
 ### Analyze the local device
 
@@ -185,6 +189,7 @@ SmartLogAnalyzerForIntune/
 |-- .github/workflows/build.yml  CI, signing and release workflow
 |-- modules/
 |   |-- analysis_summary.py      Shared report and AI summary builders
+|   |-- anonymizer.py            Support-safe ZIP redaction helpers
 |   |-- ai_analyzer.py           Claude/OpenAI/Ollama integration
 |   |-- compliance_checker.py    Compliance status calculation
 |   |-- device_parser.py         Apps, drivers, WiFi, Autopatch data
@@ -193,6 +198,7 @@ SmartLogAnalyzerForIntune/
 |   |-- extra_parser.py          CAB, proxy, ipconfig, msinfo32 and extra data
 |   |-- hardware_parser.py       Battery, firewall and certificate parsing
 |   |-- health_analyzer.py       Local health findings
+|   |-- insights.py              Score, actions, root causes and timeline
 |   |-- local_collector.py       Local diagnostic ZIP collection
 |   |-- mdm_diag_parser.py       MDMDiagHTMLReport parser
 |   |-- mdm_parser.py            DSRegCmd, enrollments, firewall, results.xml

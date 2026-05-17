@@ -41,6 +41,8 @@ from modules.local_collector    import collect_and_zip
 from modules.ai_analyzer        import AIAnalyzer, AIConfig, build_context, build_prompt, PROVIDERS
 from modules.health_analyzer    import HealthAnalyzer
 from modules.analysis_summary   import build_ai_device_summary, build_report_device_summary
+from modules.anonymizer         import export_anonymized_zip
+from modules.insights           import build_insights
 
 # Color palette
 C_BG       = "#071527"
@@ -133,6 +135,8 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._tab_ai             = None
         self._health_report      = None
         self._health_error       = ""
+        self._insights           = None
+        self._search_rows        = []
 
         self._build_ui()
         self._center_window()
@@ -233,6 +237,11 @@ class SmartLogAnalyzerApp(tk.Tk):
             bg="#1e8449", fg="white", active_bg="#5e44d4", state="disabled")
         self._btn_export.pack(side="left", padx=(0, 8))
 
+        self._btn_export_anon = self._flat_btn(
+            bar, "Export anonymized ZIP", self._export_anonymized_zip,
+            bg="#6f42c1", fg="white", active_bg="#5e44d4", state="disabled")
+        self._btn_export_anon.pack(side="left", padx=(0, 8))
+
         self._btn_clear = self._flat_btn(
             bar, "Reset", self._clear_all,
             bg=C_PANEL, fg=C_TEXT, active_bg="#1a3060")
@@ -273,6 +282,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._nb.pack(fill="both", expand=True, padx=8, pady=(4, 0))
 
         self._tab_summary  = tk.Frame(self._nb, bg=C_BG)
+        self._tab_insights = tk.Frame(self._nb, bg=C_BG)
         self._tab_mdm_diag = tk.Frame(self._nb, bg=C_BG)
         self._tab_wu       = tk.Frame(self._nb, bg=C_BG)
         self._tab_eventlog = tk.Frame(self._nb, bg=C_BG)
@@ -286,6 +296,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._tab_files    = tk.Frame(self._nb, bg=C_BG)
 
         self._nb.add(self._tab_summary,  text="  Summary  ")
+        self._nb.add(self._tab_insights, text="  Insights  ")
         self._nb.add(self._tab_mdm_diag, text="  MDM Diagnostics  ")
         self._nb.add(self._tab_wu,       text="  Windows Update  ")
         self._nb.add(self._tab_eventlog, text="  Event Log  ")
@@ -298,6 +309,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._nb.add(self._tab_files,    text="  ZIP Files  ")
 
         self._build_tab_summary()
+        self._build_tab_insights()
         self._build_tab_mdm_diag()
         self._build_tab_wu()
         self._build_tab_eventlog_placeholder()
@@ -457,6 +469,74 @@ class SmartLogAnalyzerApp(tk.Tk):
             "  Known MDM error codes -> 0x80180xxx, 0x87D1xxxx, AAD...\n\n"
             "The report can be exported as a standalone HTML file.\n")
         self._txt_summary.configure(state="disabled")
+
+    def _build_tab_insights(self):
+        f = self._tab_insights
+        for w in f.winfo_children():
+            w.destroy()
+
+        tk.Label(f, text="Top Actions, Health Score & Timeline",
+                 bg=C_BG, fg=C_HEADER, font=FONT_TITLE
+                 ).pack(anchor="w", padx=16, pady=(12, 4))
+
+        score_row = tk.Frame(f, bg=C_BG)
+        score_row.pack(fill="x", padx=16, pady=(0, 8))
+        self._lbl_health_score = self._info_card(score_row, "Device Health Score", "---")
+        self._lbl_health_status = self._info_card(score_row, "Health Status", "---")
+        self._lbl_wufb_status = self._info_card(score_row, "WUfB Summary", "---")
+
+        search_row = tk.Frame(f, bg=C_BG)
+        search_row.pack(fill="x", padx=16, pady=(0, 8))
+        tk.Label(search_row, text="Global search:", bg=C_BG, fg=C_TEXT_DIM,
+                 font=FONT_BOLD).pack(side="left", padx=(0, 6))
+        self._global_search_var = tk.StringVar()
+        ent = tk.Entry(search_row, textvariable=self._global_search_var,
+                       bg=C_SURFACE, fg=C_TEXT, insertbackground=C_TEXT,
+                       relief="flat", width=48)
+        ent.pack(side="left", padx=(0, 10))
+        self._lbl_global_search_count = tk.Label(
+            search_row, text="0 result(s)", bg=C_BG, fg=C_TEXT_DIM,
+            font=("Segoe UI", 9))
+        self._lbl_global_search_count.pack(side="left")
+        self._global_search_var.trace_add("write",
+            lambda *_: self._populate_global_search())
+
+        nb = ttk.Notebook(f, style="Dark.TNotebook")
+        nb.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+
+        tab_actions = tk.Frame(nb, bg=C_BG)
+        tab_causes = tk.Frame(nb, bg=C_BG)
+        tab_timeline = tk.Frame(nb, bg=C_BG)
+        tab_wufb = tk.Frame(nb, bg=C_BG)
+        tab_search = tk.Frame(nb, bg=C_BG)
+        nb.add(tab_actions, text="  Top 5 Actions  ")
+        nb.add(tab_causes, text="  Root Causes  ")
+        nb.add(tab_timeline, text="  Timeline  ")
+        nb.add(tab_wufb, text="  WUfB  ")
+        nb.add(tab_search, text="  Search Results  ")
+
+        self._tree_top_actions = self._make_tree(
+            tab_actions, ("sev", "title", "rec", "src"),
+            ["Severity", "Action", "Recommendation", "Source"],
+            [95, 320, 520, 160])
+        self._tree_root_causes = self._make_tree(
+            tab_causes, ("sev", "title", "detail", "src"),
+            ["Severity", "Likely Cause", "Evidence", "Source"],
+            [95, 320, 520, 160])
+        self._tree_timeline = self._make_tree(
+            tab_timeline, ("time", "sev", "src", "title", "detail"),
+            ["Time", "Severity", "Source", "Event", "Detail"],
+            [150, 90, 160, 220, 520])
+        self._tree_wufb = self._make_tree(
+            tab_wufb, ("sev", "setting", "value", "src"),
+            ["Severity", "Setting", "Value", "Source"],
+            [95, 340, 320, 260])
+        self._tree_global_search = self._make_tree(
+            tab_search, ("area", "sev", "title", "detail", "src"),
+            ["Area", "Severity", "Title", "Detail", "Source"],
+            [120, 90, 300, 520, 180])
+
+        self._populate_insights()
 
     def _info_card(self, parent, label, value):
         """Compact horizontal info card: Label / Value."""
@@ -1817,6 +1897,7 @@ class SmartLogAnalyzerApp(tk.Tk):
             f"{total_err} error(s), {total_warn} warning(s)")
 
         self._build_evtx_inner_nb()
+        self._refresh_insights()
 
     # -------------------------------------------------------------------------
 
@@ -2915,6 +2996,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._set_status("Updating UI: File index...")
         self._populate_ai_after_analysis()
         self._populate_files()
+        self._refresh_insights()
         self._analysis_done = True
         self._analysis_done_ui()
 
@@ -2924,6 +3006,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._btn_analyse.configure(state="normal")
         if self._analysis_done:
             self._btn_export.configure(state="normal")
+            self._btn_export_anon.configure(state="normal")
         self._set_status(
             "Analysis complete  --  Browse tabs or export the HTML report")
 
@@ -3007,6 +3090,114 @@ class SmartLogAnalyzerApp(tk.Tk):
     # =========================================================================
     # POPULATE METHODS
     # =========================================================================
+
+    def _refresh_insights(self):
+        self._insights = build_insights(
+            mdm_parser=self._mdm_parser,
+            error_detector=self._error_detector,
+            compliance_summary=self._compliance_summary,
+            wu_parser=self._wu_parser,
+            health_report=self._health_report,
+            hardware_parser=self._hardware_parser,
+            evtx_parsers=self._evtx_parsers,
+            zip_info=self._zip_info,
+        )
+        self._search_rows = self._build_global_search_rows()
+        self._populate_insights()
+
+    def _build_global_search_rows(self):
+        rows = list(getattr(self._insights, "search_rows", []) or [])
+
+        for k, v in (getattr(self._mdm_parser, "device_info", {}) or {}).items():
+            rows.append(("Device", "INFO", k, v, "DSRegCmd"))
+        for k, v in (getattr(self._mdm_parser, "enrollment_info", {}) or {}).items():
+            rows.append(("Enrollment", "INFO", k, v, "Enrollments"))
+
+        for ps in getattr(self._compliance_summary, "policy_statuses", []) or []:
+            rows.append(("Compliance", ps.status, ps.area, ps.details, ps.source_file))
+
+        for ev in getattr(self._error_detector, "events", [])[:1000]:
+            rows.append(("IME", ev.severity, ev.category, ev.message, ev.source_file))
+
+        inventory = getattr(self._zip_handler, "file_inventory", {}) or {}
+        extract_dir = getattr(self._zip_handler, "extract_dir", "") or ""
+        for fp in inventory.get("all_files", [])[:2000]:
+            rel = os.path.relpath(fp, extract_dir) if extract_dir else fp
+            rows.append(("File", "INFO", os.path.basename(fp), rel, "ZIP"))
+
+        return rows
+
+    def _populate_insights(self):
+        if not hasattr(self, "_tree_top_actions"):
+            return
+        ins = self._insights
+        for tree_name in ("_tree_top_actions", "_tree_root_causes",
+                          "_tree_timeline", "_tree_wufb",
+                          "_tree_global_search"):
+            tree = getattr(self, tree_name, None)
+            if tree:
+                self._tree_clear(tree)
+        if not ins:
+            return
+
+        score = ins.score.score
+        score_color = C_OK if score >= 85 else C_WARN if score >= 60 else C_ERROR
+        self._lbl_health_score.configure(text=f"{score}/100", fg=score_color)
+        self._lbl_health_status.configure(text=ins.score.status, fg=score_color)
+        self._lbl_wufb_status.configure(text=ins.wufb.status,
+                                        fg=C_OK if "No blocking" in ins.wufb.status else C_WARN)
+
+        for i, item in enumerate(ins.top_actions):
+            self._tree_top_actions.insert(
+                "", "end",
+                values=(item.severity, item.title, item.recommendation, item.source),
+                tags=("even" if i % 2 == 0 else "odd",))
+        if not ins.top_actions:
+            self._tree_top_actions.insert("", "end",
+                values=("OK", "No priority action detected", "", "Local rules"))
+
+        for i, item in enumerate(ins.root_causes):
+            self._tree_root_causes.insert(
+                "", "end",
+                values=(item.severity, item.title, item.detail, item.source),
+                tags=("even" if i % 2 == 0 else "odd",))
+
+        for i, item in enumerate(ins.timeline):
+            self._tree_timeline.insert(
+                "", "end",
+                values=(item.timestamp, item.severity, item.source,
+                        item.title, item.detail),
+                tags=("even" if i % 2 == 0 else "odd",))
+
+        for i, item in enumerate(ins.wufb.entries):
+            self._tree_wufb.insert(
+                "", "end",
+                values=(item.severity, item.title, item.detail, item.source),
+                tags=("even" if i % 2 == 0 else "odd",))
+        if not ins.wufb.entries:
+            self._tree_wufb.insert("", "end",
+                values=("INFO", "No WUfB policy data found", "", "Windows Update"))
+
+        self._populate_global_search()
+
+    def _populate_global_search(self):
+        tree = getattr(self, "_tree_global_search", None)
+        if not tree:
+            return
+        self._tree_clear(tree)
+        term = getattr(self, "_global_search_var", tk.StringVar()).get().strip().lower()
+        rows = self._search_rows or []
+        if term:
+            rows = [
+                r for r in rows
+                if term in " ".join(str(x) for x in r).lower()
+            ]
+        for i, row in enumerate(rows[:500]):
+            self._tree_global_search.insert(
+                "", "end", values=row,
+                tags=("even" if i % 2 == 0 else "odd",))
+        if hasattr(self, "_lbl_global_search_count"):
+            self._lbl_global_search_count.configure(text=f"{len(rows)} result(s)")
 
     def _update_kpis(self):
         errors   = self._error_summary.get("error_count",   0)
@@ -3667,6 +3858,7 @@ class SmartLogAnalyzerApp(tk.Tk):
                         ev.error_code, ev.etl_file),
                 tags=(ev.level, "even" if i % 2 == 0 else "odd"))
             i += 1
+        self._refresh_insights()
 
     def _run_cab_extract(self):
         """Triggered automatically after analysis, or manually via the button."""
@@ -3730,6 +3922,7 @@ class SmartLogAnalyzerApp(tk.Tk):
                     f"CAB extracted  --  MDM Diag: {errors} error(s), {warnings} warning(s) detected")
             else:
                 self._set_status("CAB extracted and parsed  --  No issues found in MDM Diag report")
+        self._refresh_insights()
 
     def _populate_files(self):
         self._tree_clear(self._tree_files)
@@ -3804,6 +3997,30 @@ class SmartLogAnalyzerApp(tk.Tk):
                 webbrowser.open(f"file:///{out_path.replace(os.sep, '/')}")
         except Exception as exc:
             messagebox.showerror("Export error", f"Could not export:\n{exc}")
+
+    def _export_anonymized_zip(self):
+        if not self._zip_path:
+            messagebox.showinfo("No ZIP", "Open or collect a diagnostic ZIP first.")
+            return
+        default_name = (
+            os.path.splitext(os.path.basename(self._zip_path))[0]
+            + "_anonymized.zip")
+        out_path = filedialog.asksaveasfilename(
+            title="Save anonymized ZIP",
+            defaultextension=".zip",
+            filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")],
+            initialfile=default_name)
+        if not out_path:
+            return
+        try:
+            export_anonymized_zip(self._zip_path, out_path)
+            messagebox.showinfo(
+                "Anonymized ZIP exported",
+                "An anonymized copy was created.\n\n"
+                "Text files were redacted for common UPN, email, GUID, IP, "
+                "tenant, device and profile path values. Review before sharing.")
+        except Exception as exc:
+            messagebox.showerror("Export error", f"Could not export anonymized ZIP:\n{exc}")
 
     # =========================================================================
     # RESET
@@ -4281,6 +4498,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._lbl_file.configure(text="No file loaded", fg=C_TEXT_DIM)
         self._btn_analyse.configure(state="normal")
         self._btn_export.configure(state="disabled")
+        self._btn_export_anon.configure(state="disabled")
         self._set_status("Reset  --  Open a new Intune Device Diagnostics ZIP")
 
         for tree in (self._tree_device, self._tree_wu, self._tree_files,
@@ -4353,6 +4571,9 @@ class SmartLogAnalyzerApp(tk.Tk):
             lbl.configure(text="---", fg=C_TEXT_DIM)
         self._device_ip = ""
         self._device_os = ""
+        self._insights = None
+        self._search_rows = []
+        self._populate_insights()
 
         # Reset AI Analysis tab
         self._ai_running = False
