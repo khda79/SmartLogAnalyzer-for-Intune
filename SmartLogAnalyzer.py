@@ -34,6 +34,7 @@ from modules.device_parser      import DeviceParser
 from modules.hardware_parser    import HardwareParser
 from modules.local_collector    import collect_and_zip
 from modules.ai_analyzer        import AIAnalyzer, AIConfig, build_context, build_prompt, PROVIDERS
+from modules.health_analyzer    import HealthAnalyzer
 
 # Color palette
 C_BG       = "#1e1e2e"
@@ -125,6 +126,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._ai_running         = False
         self._tab_ai             = None
         self._health_report      = None
+        self._health_error       = ""
 
         self._build_ui()
         self._center_window()
@@ -2728,21 +2730,36 @@ class SmartLogAnalyzerApp(tk.Tk):
                     if os.path.basename(os.path.dirname(_fp)) == "extended":
                         _ext_dir = os.path.dirname(_fp)
                         break
+                if not _ext_dir:
+                    # Try to find it via a known extended/ file
+                    _probe = (self._zip_handler.find_file("ps_system_info") or
+                              self._zip_handler.find_file("ps_bitlocker") or
+                              self._zip_handler.find_file("entra_join_diag"))
+                    if _probe and os.path.basename(os.path.dirname(_probe)) == "extended":
+                        _ext_dir = os.path.dirname(_probe)
                 if not _ext_dir and _all_files:
+                    # Fallback: assume extended/ is beside first extracted file
                     _ext_dir = os.path.join(
                         os.path.dirname(_all_files[0]), "extended")
-                _drivers   = getattr(self._device_parser, 'drivers', [])
-                _apps_raw  = getattr(self._device_parser, 'installed_apps', [])
-                _apps_list = [{"name": a.get("name", ""), "version": a.get("version", ""),
-                               "x64": a.get("x64", True)} for a in _apps_raw]
+                # DriversParser has a .drivers list of Driver dataclasses
+                _drv_parser = getattr(self._device_parser, 'drivers', None)
+                _drivers    = getattr(_drv_parser, 'drivers', []) if _drv_parser else []
+                # InstalledAppsParser has a .apps list of InstalledApp dataclasses
+                _app_parser = getattr(self._device_parser, 'apps', None)
+                _apps_raw   = getattr(_app_parser, 'apps', []) if _app_parser else []
+                _apps_list  = [{"name": a.name, "version": a.version,
+                                "x64": getattr(a, "arch", "") != "x86"}
+                               for a in _apps_raw]
                 self._health_report = ha.analyse(
                     ext_dir=_ext_dir,
                     drivers=_drivers,
                     installed_apps=_apps_list,
                     aad_evtx_text=_aad_txt,
                 )
-            except Exception:
+            except Exception as _he:
+                import traceback as _tb
                 self._health_report = None
+                self._health_error = _tb.format_exc()
 
             self._set_status("Updating UI...")
             self.after(0, self._populate_ui)
@@ -3837,8 +3854,12 @@ class SmartLogAnalyzerApp(tk.Tk):
         canvas.bind_all("<MouseWheel>", _on_wheel)
 
         if not report or not report.findings:
-            tk.Label(body, text="No health findings available.",
-                     bg=C_BG, fg=C_TEXT_DIM, font=("Segoe UI", 10)).pack(pady=20)
+            err = getattr(self, "_health_error", "")
+            msg = ("Health analysis error:\n" + err[:800]) if err else "No health findings available."
+            tk.Label(body, text=msg,
+                     bg=C_BG, fg=C_ERROR if err else C_TEXT_DIM,
+                     font=("Segoe UI", 9), wraplength=900,
+                     justify="left", anchor="w").pack(pady=20, padx=10)
             return
 
         # ── Group findings by category ────────────────────────────────────────
