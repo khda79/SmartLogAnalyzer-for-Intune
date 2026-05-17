@@ -1,0 +1,25 @@
+# Build outputs
+dist/
+build/
+*.spec
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Temp / local scan ZIPs (peuvent contenir des données sensibles)
+*_DiagLogs_*.zip
+intune_local_full_*/
+intune_diag_*/
+intune_cab_*/
+
+# OS
+Thumbs.db
+.DS_Store

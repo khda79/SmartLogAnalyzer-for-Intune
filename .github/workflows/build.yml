@@ -1,0 +1,223 @@
+name: Build & Release
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+# • Every push / PR  →  CI build only (no signing, no release)
+# • Push of a tag v*.*.*  →  build + sign (SignPath) + GitHub Release
+on:
+  push:
+    branches: ["**"]
+    tags:     ["v*.*.*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 1. BUILD
+  # ════════════════════════════════════════════════════════════════════════════
+  build:
+    name: Build executable (Windows)
+    runs-on: windows-latest
+
+    steps:
+      # ── Source ──────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python ──────────────────────────────────────────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── Read version from SmartLogAnalyzer.py ───────────────────────────────
+      - name: Extract version
+        id: version
+        shell: python
+        run: |
+          import re, os
+          with open("SmartLogAnalyzer.py", encoding="utf-8") as f:
+              content = f.read()
+          m = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
+          version = m.group(1) if m else "0.0.0"
+          # Write to GITHUB_OUTPUT
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\n")
+          print(f"Version: {version}")
+
+      # ── PyInstaller ─────────────────────────────────────────────────────────
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --onefile --windowed `
+            --name "SmartLogAnalyzer" `
+            --icon "logo.ico" `
+            --add-data "modules;modules" `
+            --add-data "logo.ico;." `
+            --hidden-import "modules.zip_handler" `
+            --hidden-import "modules.mdm_parser" `
+            --hidden-import "modules.error_detector" `
+            --hidden-import "modules.compliance_checker" `
+            --hidden-import "modules.report_generator" `
+            --hidden-import "modules.wu_parser" `
+            --hidden-import "modules.extra_parser" `
+            --hidden-import "modules.mdm_diag_parser" `
+            --hidden-import "modules.evtx_parser" `
+            --hidden-import "modules.device_parser" `
+            --hidden-import "modules.hardware_parser" `
+            --hidden-import "modules.ai_analyzer" `
+            --hidden-import "modules.local_collector" `
+            --hidden-import "tkinter" `
+            --hidden-import "tkinter.ttk" `
+            --hidden-import "tkinter.filedialog" `
+            --hidden-import "tkinter.messagebox" `
+            --hidden-import "xml.etree.ElementTree" `
+            SmartLogAnalyzer.py
+
+      - name: Verify build output
+        run: |
+          if (Test-Path "dist\SmartLogAnalyzer.exe") {
+            $size = (Get-Item "dist\SmartLogAnalyzer.exe").Length / 1MB
+            Write-Host "Build OK — $([math]::Round($size,1)) MB"
+          } else {
+            Write-Error "dist\SmartLogAnalyzer.exe not found!"
+            exit 1
+          }
+
+      # ── Upload artifact (needed by signing job) ──────────────────────────────
+      - name: Upload unsigned artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartLogAnalyzer-unsigned
+          path: dist\SmartLogAnalyzer.exe
+          retention-days: 7
+
+    outputs:
+      version:     ${{ steps.version.outputs.version }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 2. SIGN  (only on version tags — SignPath REST API, no TBS required)
+  # ════════════════════════════════════════════════════════════════════════════
+  sign:
+    name: Sign executable (SignPath Foundation)
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      # ── Download unsigned exe ────────────────────────────────────────────────
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SmartLogAnalyzer-unsigned
+          path: unsigned/
+
+      # ── Submit signing request via REST API (API token, no TBS needed) ───────
+      - name: Submit signing request
+        id: submit
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://app.signpath.io/api/v1/${{ vars.SIGNPATH_ORG_ID }}/SigningRequests" \
+            -H "Authorization: Bearer ${{ secrets.SIGNPATH_API_TOKEN }}" \
+            -F "ProjectSlug=smartloganalyzer-intune" \
+            -F "SigningPolicySlug=release-signing" \
+            -F "ArtifactConfigurationSlug=single-exe" \
+            -F "Artifact=@unsigned/SmartLogAnalyzer.exe")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          echo "HTTP $HTTP_CODE: $BODY"
+          if [ "$HTTP_CODE" != "201" ]; then
+            echo "Signing request failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+          REQUEST_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['signingRequestId'])")
+          echo "request_id=$REQUEST_ID" >> "$GITHUB_OUTPUT"
+          echo "Signing request ID: $REQUEST_ID"
+
+      # ── Poll until complete (max 10 min) ─────────────────────────────────────
+      - name: Wait for signing completion
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s \
+              "https://app.signpath.io/api/v1/${{ vars.SIGNPATH_ORG_ID }}/SigningRequests/${{ steps.submit.outputs.request_id }}" \
+              -H "Authorization: Bearer ${{ secrets.SIGNPATH_API_TOKEN }}" | \
+              python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+            echo "Poll $i/60 — status: $STATUS"
+            if [ "$STATUS" = "Completed" ]; then exit 0; fi
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Denied" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo "Signing ended with status: $STATUS"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timeout waiting for signing"
+          exit 1
+
+      # ── Download signed exe ──────────────────────────────────────────────────
+      - name: Download signed artifact
+        run: |
+          mkdir -p signed
+          curl -s \
+            "https://app.signpath.io/api/v1/${{ vars.SIGNPATH_ORG_ID }}/SigningRequests/${{ steps.submit.outputs.request_id }}/SignedArtifact" \
+            -H "Authorization: Bearer ${{ secrets.SIGNPATH_API_TOKEN }}" \
+            -o signed/SmartLogAnalyzer.exe
+          ls -lh signed/SmartLogAnalyzer.exe
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartLogAnalyzer-signed
+          path: signed/SmartLogAnalyzer.exe
+          retention-days: 30
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 3. RELEASE  (only on version tags)
+  # ════════════════════════════════════════════════════════════════════════════
+  release:
+    name: Create GitHub Release
+    needs: [build, sign]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (for release notes)
+        uses: actions/checkout@v4
+
+      - name: Download signed executable
+        uses: actions/download-artifact@v4
+        with:
+          name: SmartLogAnalyzer-signed
+          path: release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SmartLogAnalyzer for Intune v${{ needs.build.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          generate_release_notes: true
+          files: release/SmartLogAnalyzer.exe
+          body: |
+            ## SmartLogAnalyzer for Intune v${{ needs.build.outputs.version }}
+
+            ### Download
+            👉 **[SmartLogAnalyzer.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/SmartLogAnalyzer.exe)**
+
+            Standalone executable — no Python installation required.
+            Digitally signed with SignPath Foundation certificate.
+
+            ### Requirements
+            - Windows 10 / 11
+            - No installation needed — run the `.exe` directly
+            - **Analyze Intune DiagLogs ZIP**: open any ZIP from the Intune portal
+            - **Analyze local device**: run as administrator for full diagnostics
