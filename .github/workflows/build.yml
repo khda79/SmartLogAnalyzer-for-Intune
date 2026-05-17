@@ -57,6 +57,7 @@ jobs:
             --icon "logo.ico" `
             --add-data "modules;modules" `
             --add-data "logo.ico;." `
+            --add-data "logo.png;." `
             --hidden-import "modules.zip_handler" `
             --hidden-import "modules.mdm_parser" `
             --hidden-import "modules.error_detector" `
@@ -69,7 +70,10 @@ jobs:
             --hidden-import "modules.device_parser" `
             --hidden-import "modules.hardware_parser" `
             --hidden-import "modules.ai_analyzer" `
+            --hidden-import "modules.health_analyzer" `
             --hidden-import "modules.local_collector" `
+            --hidden-import "PIL" `
+            --collect-all "PIL" `
             --hidden-import "tkinter" `
             --hidden-import "tkinter.ttk" `
             --hidden-import "tkinter.filedialog" `
