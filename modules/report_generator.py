@@ -12,18 +12,18 @@ import datetime
 
 _CSS = """
 :root {
-  --accent:    #0078d4;
-  --accent-dk: #005a9e;
+  --accent:    #3aa0ff;
+  --accent-dk: #1a6bb5;
   --sidebar-w: 220px;
-  --bg:        #f5f6fa;
+  --bg:        #f0f4fa;
   --card-bg:   #ffffff;
-  --text:      #1a1a2e;
-  --text-dim:  #6b7280;
-  --border:    #e5e7eb;
-  --ok:        #16a34a;
-  --warn:      #d97706;
-  --err:       #dc2626;
-  --info:      #0284c7;
+  --text:      #0d1b2e;
+  --text-dim:  #637083;
+  --border:    #d6e0ef;
+  --ok:        #3dba69;
+  --warn:      #c9901a;
+  --err:       #e5534b;
+  --info:      #3aa0ff;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -35,14 +35,15 @@ body {
 /* ── Sidebar ── */
 #sidebar {
   width: var(--sidebar-w); min-width: var(--sidebar-w);
-  background: #1e1e2e; color: #cdd6f4;
+  background: #071527; color: #dfe8f4;
   position: sticky; top: 0; height: 100vh;
   overflow-y: auto; flex-shrink: 0;
   display: flex; flex-direction: column;
+  border-right: 1px solid #0d2747;
 }
 #sidebar .brand {
   padding: 18px 16px 14px;
-  background: var(--accent);
+  background: linear-gradient(135deg, #3aa0ff 0%, #8367ff 100%);
   color: white; font-weight: 700; font-size: .95em;
   line-height: 1.3;
 }
@@ -50,22 +51,24 @@ body {
 #sidebar nav { padding: 8px 0; flex: 1; }
 #sidebar nav a {
   display: flex; align-items: center; gap: 8px;
-  padding: 9px 16px; color: #a6adc8;
+  padding: 9px 16px; color: #93aac4;
   text-decoration: none; font-size: .84em; font-weight: 500;
   border-left: 3px solid transparent;
   transition: all .15s;
 }
-#sidebar nav a:hover  { color: white; background: rgba(255,255,255,.06); }
-#sidebar nav a.active { color: white; border-left-color: var(--accent); background: rgba(0,120,212,.18); }
+#sidebar nav a:hover  { color: #dfe8f4; background: rgba(58,160,255,.08); }
+#sidebar nav a.active { color: white; border-left-color: var(--accent); background: rgba(58,160,255,.18); }
 #sidebar nav .nav-section {
   padding: 12px 16px 4px; font-size: .7em; text-transform: uppercase;
-  letter-spacing: .08em; color: #585b70; font-weight: 600;
+  letter-spacing: .08em; color: #3d5270; font-weight: 600;
 }
 
 /* ── Main ── */
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 header.page-header {
-  background: var(--accent); color: white;
+  background: linear-gradient(135deg, #071527 0%, #0d2747 100%);
+  border-bottom: 3px solid var(--accent);
+  color: white;
   padding: 20px 32px; position: sticky; top: 0; z-index: 10;
 }
 header.page-header h1 { font-size: 1.4em; font-weight: 700; }
@@ -117,7 +120,7 @@ section { margin-bottom: 32px; scroll-margin-top: 72px; }
 .tbl-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .86em; }
 th {
-  background: #f3f4f6; text-align: left;
+  background: #e8f0fb; text-align: left;
   padding: 9px 13px; border-bottom: 2px solid var(--border);
   white-space: nowrap; font-weight: 600; color: var(--text-dim);
 }
@@ -170,7 +173,7 @@ tr:hover td { background: #fafafa; }
 
 /* ── Code block ── */
 pre {
-  background: #1e1e2e; color: #cdd6f4; font-family: 'Consolas', monospace;
+  background: #071527; color: #dfe8f4; font-family: 'Consolas', monospace;
   font-size: .8em; padding: 12px 16px; border-radius: 6px;
   overflow-x: auto; white-space: pre-wrap; word-break: break-all;
   max-height: 320px; overflow-y: auto;
@@ -287,7 +290,8 @@ class ReportGenerator:
                  device_parser     = None,
                  hardware_parser   = None,
                  evtx_parsers      = None,
-                 device_summary    = None):
+                 device_summary    = None,
+                 health_report     = None):
 
         zip_info         = zip_info         or {}
         device_info      = device_info      or {}
@@ -323,6 +327,9 @@ class ReportGenerator:
                               self._html_drivers(device_parser))
             self._add_section("s-network", "📶 WiFi Profiles",
                               self._html_wifi(device_parser))
+        if health_report and getattr(health_report, "findings", []):
+            self._add_section("s-health", "🩺 Health Analysis",
+                              self._html_health(health_report))
         self._add_section("s-eventlog", "🪟 Event Logs Windows",
                           self._html_evtx(evtx_parsers))
         self._add_section("s-files", "📁 Contenu du ZIP",
@@ -886,6 +893,96 @@ class ReportGenerator:
         return out
 
     # ──────────────────────────────────────────────────────────────
+    def _html_health(self, hr):
+        """Render HealthAnalyzer findings as HTML."""
+        findings = getattr(hr, "findings", [])
+        if not findings:
+            return '<div class="alert alert-ok">No health issues detected.</div>'
+
+        # Severity order for sorting
+        _sev_order = {"ERROR": 0, "WARNING": 1, "WARN": 1, "INFO": 2, "OK": 3}
+        findings = sorted(findings, key=lambda f: _sev_order.get(f.severity.upper(), 9))
+
+        errors   = sum(1 for f in findings if f.severity.upper() in ("ERROR",))
+        warnings = sum(1 for f in findings if f.severity.upper() in ("WARNING", "WARN"))
+
+        # Summary banner
+        if errors:
+            banner = (f'<div class="alert alert-err">'
+                      f'<strong>{errors} critical issue(s)</strong> and '
+                      f'{warnings} warning(s) detected.</div>')
+        elif warnings:
+            banner = (f'<div class="alert alert-warn">'
+                      f'<strong>{warnings} warning(s)</strong> detected — no critical issues.</div>')
+        else:
+            banner = '<div class="alert alert-ok">Device health looks good.</div>'
+
+        # Score tile (count non-OK findings as penalty)
+        total = len(findings)
+        ok_count = sum(1 for f in findings if f.severity.upper() == "OK")
+        score = max(0, 100 - errors * 15 - warnings * 5)
+        score_cls = "ok" if score >= 80 else "warn" if score >= 50 else "err"
+        score_html = (
+            f'<div class="kpi-grid" style="margin-bottom:16px">'
+            f'<div class="kpi {score_cls}"><div class="val">{score}</div>'
+            f'<div class="lbl">Health Score</div></div>'
+            f'<div class="kpi err"><div class="val">{errors}</div>'
+            f'<div class="lbl">Critical</div></div>'
+            f'<div class="kpi warn"><div class="val">{warnings}</div>'
+            f'<div class="lbl">Warnings</div></div>'
+            f'<div class="kpi ok"><div class="val">{ok_count}</div>'
+            f'<div class="lbl">OK checks</div></div>'
+            f'<div class="kpi info"><div class="val">{total}</div>'
+            f'<div class="lbl">Total checks</div></div>'
+            f'</div>'
+        )
+
+        # Group by category
+        categories = {}
+        for f in findings:
+            categories.setdefault(f.category, []).append(f)
+
+        cards_html = ""
+        for cat, items in categories.items():
+            cat_errors = sum(1 for f in items if f.severity.upper() == "ERROR")
+            cat_cls = "err" if cat_errors else (
+                "warn" if any(f.severity.upper() in ("WARNING", "WARN") for f in items)
+                else "ok"
+            )
+            hdr_badge = _badge(f"{len(items)}", cat_cls)
+            rows = ""
+            for f in items:
+                sev_cls = ("err"  if f.severity.upper() == "ERROR"
+                           else "warn" if f.severity.upper() in ("WARNING", "WARN")
+                           else "ok"   if f.severity.upper() == "OK"
+                           else "info")
+                action_cell = (
+                    f'<span style="color:var(--warn);font-size:.82em">{_esc(f.action)}</span>'
+                    if f.action else '<span style="color:var(--text-dim)">—</span>'
+                )
+                rows += (
+                    f"<tr>"
+                    f'<td>{_badge(f.severity, sev_cls)}</td>'
+                    f'<td><strong>{_esc(f.title)}</strong>'
+                    f'<div style="color:var(--text-dim);font-size:.82em;margin-top:2px">'
+                    f'{_esc(f.detail)}</div></td>'
+                    f'<td style="font-size:.82em;color:var(--text-dim)">'
+                    f'{_esc(f.value)}</td>'
+                    f'<td>{action_cell}</td>'
+                    f"</tr>"
+                )
+            cards_html += (
+                f'<div class="card">'
+                f'<div class="card-header">🩺 {_esc(cat)} {hdr_badge}</div>'
+                '<div class="card-body">' +
+                _tbl([], ["Severity", "Finding", "Value", "Recommended Action"],
+                     rows, f"tbl_health_{cat.replace(' ','_').lower()}", filterable=False) +
+                '</div></div>'
+            )
+
+        return banner + score_html + cards_html
+
+    # ──────────────────────────────────────────────────────────────
     def _html_files(self, zip_info):
         cats = zip_info.get("categories", {})
         if not cats:
@@ -921,7 +1018,7 @@ class ReportGenerator:
 <body>
 
 <aside id="sidebar">
-  <div class="brand">SmartLogAnalyzer<small>Intune Device Diagnostics</small></div>
+  <div class="brand">WorkplaceCloudHub<small>SmartLogAnalyzer for Intune</small></div>
   <nav>
     <div class="nav-section">Navigation</div>
     {nav_links}

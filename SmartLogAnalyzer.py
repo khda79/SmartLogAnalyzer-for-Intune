@@ -3821,6 +3821,7 @@ class SmartLogAnalyzerApp(tk.Tk):
                 hardware_parser   = self._hardware_parser,
                 evtx_parsers      = self._evtx_parsers,
                 device_summary    = device_summary,
+                health_report     = self._health_report,
                 output_path       = out_path)
             if messagebox.askyesno(
                     "Report exported",
@@ -4381,6 +4382,4 @@ class SmartLogAnalyzerApp(tk.Tk):
 
 
 if __name__ == "__main__":
-    app = SmartLogAnalyzerApp()
-    app.mainloop()
-
+    App().mainloop()
