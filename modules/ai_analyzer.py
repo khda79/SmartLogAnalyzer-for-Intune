@@ -76,14 +76,16 @@ class AIConfig:
     ollama_url:  str   = "http://localhost:11434"
     max_tokens:  int   = 2048
     temperature: float = 0.3
+    remember_api_key: bool = False
 
     def save(self):
         data = {
             "provider":   self.provider,
-            "api_key":    self.api_key,
+            "api_key":    self.api_key if self.remember_api_key else "",
             "model":      self.model,
             "ollama_url": self.ollama_url,
             "max_tokens": self.max_tokens,
+            "remember_api_key": self.remember_api_key,
         }
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -98,6 +100,8 @@ class AIConfig:
             try:
                 with open(CONFIG_FILE, encoding="utf-8") as f:
                     data = json.load(f)
+                if data.get("api_key") and "remember_api_key" not in data:
+                    data["remember_api_key"] = True
                 for k, v in data.items():
                     if hasattr(cfg, k):
                         setattr(cfg, k, v)

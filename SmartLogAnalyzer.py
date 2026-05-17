@@ -40,6 +40,7 @@ from modules.hardware_parser    import HardwareParser
 from modules.local_collector    import collect_and_zip
 from modules.ai_analyzer        import AIAnalyzer, AIConfig, build_context, build_prompt, PROVIDERS
 from modules.health_analyzer    import HealthAnalyzer
+from modules.analysis_summary   import build_ai_device_summary, build_report_device_summary
 
 # Color palette
 C_BG       = "#071527"
@@ -3772,41 +3773,14 @@ class SmartLogAnalyzerApp(tk.Tk):
         if not out_path:
             return
         try:
-            # Build device identity dict (mirrors Analysis Overview)
-            ep   = self._extra_parser
-            dev  = self._mdm_parser.device_info
-            name = dev.get("Device Name", "")
-            if not name:
-                hdr  = self._mdm_parser.dsregcmd.sections.get("Header", {})
-                name = hdr.get("DeviceName", hdr.get("Device Name", ""))
-            if not name:
-                name = ep.ipconfig.hostname
-            os_  = getattr(self, "_device_os", "")
-            if not os_:
-                wu_info = self._wu_parser.orchestrator.info
-                os_ = wu_info.get("OS Version", "") or wu_info.get("OS Build", "")
-            if not os_:
-                os_ = ep.msinfo32.display_version
-            if not os_:
-                os_ = self._mdm_diag_parser.device_info.get("OS Build", "")
-            mdm_diag = self._mdm_diag_parser
-            device_summary = {
-                "Computer Name":    name or "Unknown",
-                "IP Address":       getattr(self, "_device_ip", "") or "Not found",
-                "OS Version":       os_ or "Unknown",
-                "Proxy":            ep.proxy.summary or "Unknown",
-                "Last User":        ep.logonui.display_name or ep.logonui.sam_user or "Unknown",
-                "IME Version":      ep.ime_reg.agent_version or "Unknown",
-                "PC Name (MDM)":    mdm_diag.device_info.get("PC name", ""),
-                "Organisation":     mdm_diag.device_info.get("Organization", ""),
-                "Edition":          mdm_diag.device_info.get("Edition", ""),
-                "Processor":        mdm_diag.device_info.get("Processor", ""),
-                "RAM":              mdm_diag.device_info.get("Installed RAM", ""),
-                "Managed by":       mdm_diag.connection_info.get("Managed by", ""),
-                "Last sync":        mdm_diag.connection_info.get("Last sync", ""),
-                "MDM Server":       mdm_diag.connection_info.get("Management server address", ""),
-                "Managed policies": mdm_diag.connection_info.get("Managed policies", ""),
-            }
+            device_summary = build_report_device_summary(
+                extra_parser=self._extra_parser,
+                mdm_parser=self._mdm_parser,
+                wu_parser=self._wu_parser,
+                mdm_diag_parser=self._mdm_diag_parser,
+                device_ip=getattr(self, "_device_ip", ""),
+                device_os=getattr(self, "_device_os", ""),
+            )
             self._report_gen.generate(
                 zip_info          = self._zip_info,
                 device_info       = self._mdm_parser.device_info,
@@ -4061,6 +4035,16 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._entry_ai_key.grid(row=1, column=1, columnspan=3, sticky="w",
                                  padx=(0, 12), pady=5)
 
+        self._ai_remember_key_var = tk.BooleanVar(value=self._ai_cfg.remember_api_key)
+        self._chk_ai_remember_key = tk.Checkbutton(
+            cfg_frame, text="Remember API key on this device",
+            variable=self._ai_remember_key_var,
+            bg=C_BG, fg=C_TEXT_DIM, selectcolor=C_SURFACE,
+            activebackground=C_BG, activeforeground=C_TEXT,
+            font=("Segoe UI", 8))
+        self._chk_ai_remember_key.grid(row=2, column=1, columnspan=3, sticky="w",
+                                       padx=(0, 12), pady=(0, 5))
+
         # Row 2 – Ollama URL (hidden if not Ollama)
         self._ai_ollama_label = tk.Label(cfg_frame, text="Ollama URL:", bg=C_BG, fg=C_TEXT,
                                           font=("Segoe UI", 9))
@@ -4145,6 +4129,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         if is_ollama:
             self._ai_apikey_label.grid_remove()
             self._entry_ai_key.grid_remove()
+            self._chk_ai_remember_key.grid_remove()
             self._ai_ollama_label.grid(row=2, column=0, sticky="w",
                                         padx=(10, 4), pady=5)
             self._entry_ollama_url.grid(row=2, column=1, columnspan=3, sticky="w",
@@ -4156,6 +4141,8 @@ class SmartLogAnalyzerApp(tk.Tk):
                                         padx=(10, 4), pady=5)
             self._entry_ai_key.grid(row=1, column=1, columnspan=3, sticky="w",
                                      padx=(0, 12), pady=5)
+            self._chk_ai_remember_key.grid(row=2, column=1, columnspan=3, sticky="w",
+                                           padx=(0, 12), pady=(0, 5))
 
     def _on_ai_provider_changed(self, _event=None):
         provider = self._ai_provider_var.get()
@@ -4202,7 +4189,8 @@ class SmartLogAnalyzerApp(tk.Tk):
 
         self._ai_cfg = AIConfig(
             provider=provider, model=model, api_key=api_key,
-            ollama_url=ollama_url, max_tokens=max_tokens)
+            ollama_url=ollama_url, max_tokens=max_tokens,
+            remember_api_key=self._ai_remember_key_var.get())
         self._ai_cfg.save()
 
         # Validation
@@ -4222,20 +4210,13 @@ class SmartLogAnalyzerApp(tk.Tk):
     def _ai_analysis_thread(self):
         """Worker thread: build context, call API, display result."""
         try:
-            # Collect device summary (same structure used for HTML report)
-            device_info    = self._device_parser.get_device_info()
-            enrollment_info = self._device_parser.get_enrollment_info()
-            device_summary = {
-                "computer_name":   device_info.get("ComputerName", ""),
-                "os":              device_info.get("OSVersion", ""),
-                "serial":          device_info.get("SerialNumber", ""),
-                "last_user":       device_info.get("LastUser", ""),
-                "ip":              self._device_ip,
-                "ime_version":     enrollment_info.get("IMEVersion", ""),
-                "aad_device_id":   enrollment_info.get("AADDeviceId", ""),
-                "mdm_device_id":   enrollment_info.get("MDMDeviceId", ""),
-                "enrolled_user":   enrollment_info.get("EnrolledUser", ""),
-            }
+            device_summary = build_ai_device_summary(
+                extra_parser=self._extra_parser,
+                mdm_parser=self._mdm_parser,
+                mdm_diag_parser=self._mdm_diag_parser,
+                device_ip=getattr(self, "_device_ip", ""),
+                device_os=getattr(self, "_device_os", ""),
+            )
 
             compliance_summary = self._compliance_summary
 

@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\App1]
+"DisplayName"="Contoso Agent"
+"DisplayVersion"="1.2.3"
+"Publisher"="Contoso"
+"InstallDate"="20260518"

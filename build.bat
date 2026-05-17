@@ -19,22 +19,19 @@ echo.
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERREUR] Python n'est pas installe ou n'est pas dans le PATH.
-    echo Installez Python 3.8+ depuis https://python.org
+    echo Installez Python 3.10+ depuis https://python.org
     pause
     exit /b 1
 )
 
-:: Verifier version Python >= 3.8
-python -c "import sys; sys.exit(0 if sys.version_info >= (3,8) else 1)" >nul 2>&1
+:: Verifier version Python >= 3.10
+python -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo [ERREUR] Python 3.8 ou superieur est requis.
+    echo [ERREUR] Python 3.10 ou superieur est requis.
     python --version
     echo.
-    echo Ce projet utilise 'dataclasses' et d'autres fonctionnalites
-    echo non disponibles en Python 3.6.
-    echo.
-    echo Installez Python 3.11 ou 3.12 depuis https://python.org
+    echo Installez Python 3.10, 3.11 ou 3.12 depuis https://python.org
     echo puis relancez ce script.
     echo.
     pause
@@ -64,7 +61,7 @@ if exist SmartLogAnalyzer.spec del /q SmartLogAnalyzer.spec
 echo [3/3] Compilation en cours...
 echo.
 
-python -m PyInstaller --onefile --windowed --name "SmartLogAnalyzer" --icon "logo.ico" --add-data "modules;modules" --add-data "logo.ico;." --add-data "logo.png;." --hidden-import "modules.zip_handler" --hidden-import "modules.mdm_parser" --hidden-import "modules.error_detector" --hidden-import "modules.compliance_checker" --hidden-import "modules.report_generator" --hidden-import "modules.wu_parser" --hidden-import "modules.extra_parser" --hidden-import "modules.mdm_diag_parser" --hidden-import "modules.evtx_parser" --hidden-import "modules.device_parser" --hidden-import "modules.hardware_parser" --hidden-import "modules.ai_analyzer" --hidden-import "modules.health_analyzer" --hidden-import "modules.local_collector" --hidden-import "PIL" --collect-all "PIL" --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "tkinter.filedialog" --hidden-import "tkinter.messagebox" --hidden-import "xml.etree.ElementTree" SmartLogAnalyzer.py
+python -m PyInstaller --onefile --windowed --name "SmartLogAnalyzer" --icon "logo.ico" --add-data "modules;modules" --add-data "logo.ico;." --add-data "logo.png;." --hidden-import "modules.zip_handler" --hidden-import "modules.mdm_parser" --hidden-import "modules.error_detector" --hidden-import "modules.compliance_checker" --hidden-import "modules.report_generator" --hidden-import "modules.wu_parser" --hidden-import "modules.extra_parser" --hidden-import "modules.mdm_diag_parser" --hidden-import "modules.evtx_parser" --hidden-import "modules.device_parser" --hidden-import "modules.hardware_parser" --hidden-import "modules.ai_analyzer" --hidden-import "modules.health_analyzer" --hidden-import "modules.local_collector" --hidden-import "modules.analysis_summary" --hidden-import "PIL" --collect-all "PIL" --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "tkinter.filedialog" --hidden-import "tkinter.messagebox" --hidden-import "xml.etree.ElementTree" SmartLogAnalyzer.py
 
 echo.
 if exist dist\SmartLogAnalyzer.exe (
@@ -78,4 +75,11 @@ if exist dist\SmartLogAnalyzer.exe (
 ) else (
     echo ====================================================
     echo   [ERREUR] La compilation a echoue.
-    echo   Consulte
+    echo   Consultez la sortie PyInstaller ci-dessus.
+    echo ====================================================
+    pause
+    exit /b 1
+)
+
+echo.
+pause

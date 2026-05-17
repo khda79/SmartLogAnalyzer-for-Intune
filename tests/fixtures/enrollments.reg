@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Enrollments\abc-def]
+"EnrollmentState"=dword:00000001
+"EnrollmentType"=dword:00000006
+"UPN"="user@example.com"
+"EnrollmentURL"="https://enrollment.manage.microsoft.com"

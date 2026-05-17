@@ -1,6 +1,6 @@
 # SmartLogAnalyzer for Intune — Python dependencies
-# All core modules use Python stdlib only (tkinter, zipfile, xml, re, etc.)
-# PyInstaller is used for compilation only — not a runtime dependency.
+# Core parsers use Python stdlib; Pillow is used by the GUI for the logo.
+# PyInstaller is used for compilation only.
 
 pyinstaller>=6.0
 pillow>=10.0

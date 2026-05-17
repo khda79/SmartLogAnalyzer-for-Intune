@@ -1,0 +1,10 @@
+| Device State |
+          AzureAdJoined : YES
+          DomainJoined : NO
+| Device Details |
+          DeviceId : device-123
+          TpmProtected : YES
+          DeviceAuthStatus : SUCCESS
+| SSO State |
+          AzureAdPrt : NO
+          Attempt Status : 0xc0000072

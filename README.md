@@ -29,8 +29,8 @@ Python/tkinter GUI — packaged as a standalone `.exe` via PyInstaller.
 
 - Windows 10 / 11
 - Python 3.10 or higher (not required if using the compiled `.exe`)
-- Standard libraries only: `tkinter`, `zipfile`, `xml`, `re`, …
-- To compile: `pip install pyinstaller`
+- Runtime uses Python standard libraries plus Pillow for the branded header image
+- To compile: `pip install -r requirements.txt`
 
 ---
 
@@ -62,6 +62,20 @@ Download `SmartLogAnalyzer.exe` from the [Releases](../../releases) page — no 
 
 ---
 
+## AI Configuration
+
+The AI tab supports Claude, OpenAI, and local Ollama. API keys are entered in the app UI.
+
+By default, API keys are not stored. If **Remember API key on this device** is checked, the key is saved locally in:
+
+```text
+%USERPROFILE%\.smartloganalyzer_ai.json
+```
+
+Leave that option unchecked on shared or admin workstations.
+
+---
+
 ## Build
 
 ### PyInstaller (recommended)
@@ -80,12 +94,37 @@ build_nuitka.bat
 
 ---
 
+## Tests
+
+Parser tests use the Python standard library test runner:
+
+```bash
+python -m unittest discover -s tests
+```
+
+---
+
+## Release Signing
+
+GitHub Actions builds the executable on every push and pull request. Signing and release publication run only when pushing a version tag matching `v*.*.*`, for example:
+
+```bash
+git tag v2.1.1
+git push origin v2.1.1
+```
+
+Tagged builds submit the unsigned executable to SignPath using `SIGNPATH_ORG_ID` and `SIGNPATH_API_TOKEN`, download the signed artifact, then publish it to GitHub Releases.
+
+---
+
 ## Project Structure
 
 ```
 SmartLogAnalyzerForIntune/
 ├── SmartLogAnalyzer.py          # Main application (tkinter GUI)
+├── LICENSE                      # MIT license
 ├── modules/
+│   ├── analysis_summary.py      # Shared report / AI summary builders
 │   ├── zip_handler.py           # ZIP extraction and file inventory
 │   ├── mdm_parser.py            # DSRegCmd, Enrollments, Firewall, results.xml
 │   ├── mdm_diag_parser.py       # MDMDiagHTMLReport.html parser
@@ -102,7 +141,8 @@ SmartLogAnalyzerForIntune/
 ├── build.bat                    # PyInstaller build script
 ├── build_nuitka.bat             # Nuitka build script
 ├── logo.ico                     # Application icon
-└── requirements.txt
+├── requirements.txt
+└── tests/                       # Parser unit tests
 ```
 
 ---

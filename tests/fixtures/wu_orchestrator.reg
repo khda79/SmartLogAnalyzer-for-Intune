@@ -1,0 +1,5 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator]
+"RebootRequired"=dword:00000001
+"UpdateManagerCtorFailures"=dword:00000002
