@@ -82,13 +82,13 @@ IME_THEME_LABELS = {
 class SmartLogAnalyzerApp(tk.Tk):
 
     APP_NAME    = "SmartLogAnalyzer for Intune"
-    APP_VERSION = "2.1.0"
+    APP_VERSION = "2.1.2"
 
     def __init__(self):
         super().__init__()
         self.title(f"{self.APP_NAME}  v{self.APP_VERSION}")
-        self.geometry("1280x860")
-        self.minsize(960, 640)
+        self.geometry("1600x980")
+        self.minsize(1280, 760)
         self.configure(bg=C_BG)
 
         # Window icon
@@ -293,33 +293,30 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._tab_health   = tk.Frame(self._nb, bg=C_BG)
         self._tab_win11    = tk.Frame(self._nb, bg=C_BG)   # shown only for Win10
         self._tab_device   = tk.Frame(self._nb, bg=C_BG)
-        self._tab_files    = tk.Frame(self._nb, bg=C_BG)
 
         self._nb.add(self._tab_summary,  text="  Summary  ")
         self._nb.add(self._tab_insights, text="  Insights  ")
-        self._nb.add(self._tab_mdm_diag, text="  MDM Diagnostics  ")
+        self._nb.add(self._tab_health,   text="  🩺 Health  ")
         self._nb.add(self._tab_wu,       text="  Windows Update  ")
+        self._nb.add(self._tab_device,   text="  Device Info  ")
+        self._nb.add(self._tab_mdm_diag, text="  MDM Diagnostics  ")
         self._nb.add(self._tab_eventlog, text="  Event Log  ")
         self._nb.add(self._tab_ime,      text="  IME Logs  ")
         self._nb.add(self._tab_appdrv,   text="  Apps & Drivers  ")
         self._nb.add(self._tab_hardware, text="  Hardware & Security  ")
         self._nb.add(self._tab_ai,       text="  🤖 AI Analysis  ")
-        self._nb.add(self._tab_health,   text="  🩺 Health  ")
-        self._nb.add(self._tab_device,   text="  Device Info  ")
-        self._nb.add(self._tab_files,    text="  ZIP Files  ")
 
         self._build_tab_summary()
         self._build_tab_insights()
-        self._build_tab_mdm_diag()
+        self._build_tab_health_placeholder()
         self._build_tab_wu()
+        self._build_tab_device()
+        self._build_tab_mdm_diag()
         self._build_tab_eventlog_placeholder()
         self._build_tab_ime_placeholder()
         self._build_tab_appdrv_placeholder()
         self._build_tab_hardware_placeholder()
         self._build_tab_ai()
-        self._build_tab_health_placeholder()
-        self._build_tab_device()
-        self._build_tab_files()
 
 
     # =========================================================================
@@ -2264,18 +2261,6 @@ class SmartLogAnalyzerApp(tk.Tk):
                 "Run PC Health Check on the device for a definitive result.")
         self._txt_win11_notes.configure(state="disabled")
 
-    def _build_tab_files(self):
-        f = self._tab_files
-        tk.Label(f, text="ZIP File Inventory",
-                 bg=C_BG, fg=C_HEADER, font=FONT_TITLE
-                 ).pack(anchor="w", padx=16, pady=(12, 4))
-
-        cols = ("name", "category", "size", "path")
-        self._tree_files = self._make_tree(
-            f, cols,
-            headings=["File Name", "Category", "Size", "Relative Path"],
-            widths=[260, 140, 80, 520])
-
     # =========================================================================
     # SHARED WIDGET HELPERS
     # =========================================================================
@@ -2962,14 +2947,14 @@ class SmartLogAnalyzerApp(tk.Tk):
         tab_ids = [self._nb.tab(i, "text") for i in range(self._nb.index("end"))]
         already_added = any("Win11" in t or "Upgrade" in t for t in tab_ids)
         if is_win10 and not already_added:
-            # Insert before Device Info tab
-            dev_idx = None
+            # Insert in the primary workflow order: Summary, Insights, Health, Win11, Windows Update.
+            wu_idx = None
             for i in range(self._nb.index("end")):
-                if "Device Info" in self._nb.tab(i, "text"):
-                    dev_idx = i
+                if "Windows Update" in self._nb.tab(i, "text"):
+                    wu_idx = i
                     break
-            if dev_idx is not None:
-                self._nb.insert(dev_idx, self._tab_win11,
+            if wu_idx is not None:
+                self._nb.insert(wu_idx, self._tab_win11,
                                 text="  ⚠ Win11 Readiness  ")
             else:
                 self._nb.add(self._tab_win11, text="  ⚠ Win11 Readiness  ")
@@ -2993,9 +2978,8 @@ class SmartLogAnalyzerApp(tk.Tk):
         self.after(10, self._populate_ui_s8)
 
     def _populate_ui_s8(self):
-        self._set_status("Updating UI: File index...")
+        self._set_status("Updating UI: final refresh...")
         self._populate_ai_after_analysis()
-        self._populate_files()
         self._refresh_insights()
         self._analysis_done = True
         self._analysis_done_ui()
@@ -3924,29 +3908,6 @@ class SmartLogAnalyzerApp(tk.Tk):
                 self._set_status("CAB extracted and parsed  --  No issues found in MDM Diag report")
         self._refresh_insights()
 
-    def _populate_files(self):
-        self._tree_clear(self._tree_files)
-        inventory   = self._zip_handler.file_inventory
-        extract_dir = self._zip_handler.extract_dir or ""
-        i = 0
-        for cat, files in inventory.items():
-            if cat in ("all_files", "ime_themes"):
-                continue
-            for fp in files:
-                try:
-                    size = os.path.getsize(fp)
-                    size_str = (f"{size/1024:.1f} KB"
-                                if size < 1_048_576
-                                else f"{size/1_048_576:.1f} MB")
-                except OSError:
-                    size_str = "?"
-                rel = os.path.relpath(fp, extract_dir) if extract_dir else fp
-                self._tree_files.insert(
-                    "", "end",
-                    values=(os.path.basename(fp), cat, size_str, rel),
-                    tags=("even" if i % 2 == 0 else "odd",))
-                i += 1
-
     # =========================================================================
     # EXPORT
     # =========================================================================
@@ -4501,7 +4462,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._btn_export_anon.configure(state="disabled")
         self._set_status("Reset  --  Open a new Intune Device Diagnostics ZIP")
 
-        for tree in (self._tree_device, self._tree_wu, self._tree_files,
+        for tree in (self._tree_device, self._tree_wu,
                      self._tree_sum_devinfo, self._tree_sum_conninfo):
             self._tree_clear(tree)
         self._txt_wu_registry.configure(state="normal")

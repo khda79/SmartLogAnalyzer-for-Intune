@@ -332,8 +332,6 @@ class ReportGenerator:
                               self._html_health(health_report))
         self._add_section("s-eventlog", "🪟 Event Logs Windows",
                           self._html_evtx(evtx_parsers))
-        self._add_section("s-files", "📁 Contenu du ZIP",
-                          self._html_files(zip_info))
 
         html = self._build_html(zip_info.get("zip_name", "unknown"))
         if output_path:
@@ -981,22 +979,6 @@ class ReportGenerator:
             )
 
         return banner + score_html + cards_html
-
-    # ──────────────────────────────────────────────────────────────
-    def _html_files(self, zip_info):
-        cats = zip_info.get("categories", {})
-        if not cats:
-            return '<div class="alert alert-info">Inventaire non disponible.</div>'
-        rows = ""
-        for cat, count in sorted(cats.items(), key=lambda x: -x[1]):
-            rows += f"<tr><td>{_esc(cat)}</td><td>{count}</td></tr>"
-        total = zip_info.get("total_files", sum(cats.values()))
-        return (
-            f'<div class="card"><div class="card-header">{total} fichiers au total</div>'
-            '<div class="card-body">' +
-            _tbl([], ["Category","Files"], rows) +
-            '</div></div>'
-        )
 
     # ──────────────────────────────────────────────────────────────
     def _build_html(self, zip_name):
