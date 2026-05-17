@@ -16,6 +16,11 @@ import datetime
 import webbrowser
 import urllib.parse
 import tkinter as tk
+try:
+    from PIL import Image, ImageTk as _ImageTk
+    _PIL_OK = True
+except ImportError:
+    _PIL_OK = False
 from tkinter import ttk, filedialog, messagebox
 
 _BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -37,17 +42,17 @@ from modules.ai_analyzer        import AIAnalyzer, AIConfig, build_context, buil
 from modules.health_analyzer    import HealthAnalyzer
 
 # Color palette
-C_BG       = "#1e1e2e"
-C_SURFACE  = "#2a2a3e"
-C_PANEL    = "#313149"
-C_ACCENT   = "#0078d4"
-C_ACCENT2  = "#00bcf2"
-C_TEXT     = "#cdd6f4"
-C_TEXT_DIM = "#a6adc8"
-C_ERROR    = "#f38ba8"
-C_WARN     = "#fab387"
-C_OK       = "#a6e3a1"
-C_HEADER   = "#89dceb"
+C_BG       = "#071527"
+C_SURFACE  = "#0d2747"
+C_PANEL    = "#102040"
+C_ACCENT   = "#3aa0ff"
+C_ACCENT2  = "#8367ff"
+C_TEXT     = "#dfe8f4"
+C_TEXT_DIM = "#637083"
+C_ERROR    = "#e5534b"
+C_WARN     = "#c9901a"
+C_OK       = "#3dba69"
+C_HEADER   = "#3aa0ff"
 
 FONT_BODY  = ("Segoe UI", 10)
 FONT_BOLD  = ("Segoe UI", 10, "bold")
@@ -153,41 +158,83 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._build_notebook()
 
     def _build_header(self):
-        hdr = tk.Frame(self, bg=C_ACCENT, height=52)
+        # WCH brand header — navy + left accent stripe + logo
+        hdr = tk.Frame(self, bg=C_PANEL, height=90)
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text=f"  {self.APP_NAME}",
-                 bg=C_ACCENT, fg="white",
-                 font=("Segoe UI", 14, "bold")).pack(side="left", padx=20, pady=10)
-        tk.Label(hdr, text="Intune Device Diagnostics Analyzer  —  workplacecloudhub.com",
-                 bg=C_ACCENT, fg="#d0e9ff",
-                 font=("Segoe UI", 9)).pack(side="left", pady=10)
-        tk.Label(hdr, text=f"v{self.APP_VERSION}",
-                 bg=C_ACCENT, fg="#90c8ff",
-                 font=("Segoe UI", 8)).pack(side="right", padx=16)
+
+        # Left accent stripe
+        tk.Frame(hdr, bg=C_ACCENT, width=5).pack(side="left", fill="y")
+
+        # Logo
+        self._logo_img = None
+        if _PIL_OK:
+            try:
+                import os as _os, sys as _sys
+                # Resolve logo.png — works both in dev and PyInstaller bundle
+                if getattr(_sys, "frozen", False):
+                    _base = _sys._MEIPASS
+                else:
+                    _base = _os.path.dirname(_os.path.abspath(__file__))
+                _logo_path = _os.path.join(_base, "logo.png")
+                _img = Image.open(_logo_path).convert("RGBA")
+                _resample = getattr(Image, "Resampling", Image).LANCZOS
+                _img = _img.resize((80, 80), _resample)
+                # Composite on exact header background color (C_PANEL #102040)
+                _bg = Image.new("RGBA", (80, 80), (16, 32, 64, 255))
+                _bg.paste(_img, mask=_img.split()[3])
+                self._logo_img = _ImageTk.PhotoImage(_bg.convert("RGB"))
+                logo_lbl = tk.Label(hdr, image=self._logo_img,
+                                    bg=C_PANEL, borderwidth=0)
+                logo_lbl.pack(side="left", padx=(10, 4), pady=5)
+            except Exception:
+                pass
+
+        # Brand block
+        brand = tk.Frame(hdr, bg=C_PANEL)
+        brand.pack(side="left", padx=(10, 0))
+        name_row = tk.Frame(brand, bg=C_PANEL)
+        name_row.pack(anchor="w", pady=(8, 0))
+        tk.Label(name_row, text="SmartLogAnalyzer",
+                 bg=C_PANEL, fg=C_TEXT,
+                 font=("Segoe UI", 13, "bold")).pack(side="left")
+        tk.Label(name_row, text="  for Intune",
+                 bg=C_PANEL, fg=C_ACCENT,
+                 font=("Segoe UI", 11)).pack(side="left")
+        tk.Label(brand,
+                 text="workplacecloudhub.com  •  Workplace, Cloud & AI Engineering",
+                 bg=C_PANEL, fg=C_TEXT_DIM,
+                 font=("Segoe UI", 8)).pack(anchor="w", pady=(0, 6))
+
+        # Version badge — right
+        ver_frame = tk.Frame(hdr, bg=C_SURFACE, padx=8, pady=3)
+        ver_frame.pack(side="right", padx=14)
+        tk.Label(ver_frame, text=f"v{self.APP_VERSION}",
+                 bg=C_SURFACE, fg=C_TEXT_DIM,
+                 font=("Segoe UI", 8)).pack()
 
     def _build_toolbar(self):
-        bar = tk.Frame(self, bg=C_SURFACE, pady=6, padx=12)
+        bar = tk.Frame(self, bg=C_BG, pady=6, padx=12)
         bar.pack(fill="x", side="top")
 
         self._btn_analyse = self._flat_btn(
             bar, "Analyze Intune DiagLogs ZIP", self._open_and_analyze,
-            bg="#107c10", fg="white", active_bg="#0a5c0a")
+            bg="#1b6ec2", fg="white", active_bg="#0a5c0a")
         self._btn_analyse.pack(side="left", padx=(0, 8))
 
         self._btn_local = self._flat_btn(
             bar, "Analyze local device", self._analyze_local_device,
-            bg="#8b4513", fg="white", active_bg="#5c2d0e")
+            bg="#1a6fbd", fg="white", active_bg="#1a82e8")
         self._btn_local.pack(side="left", padx=(0, 8))
 
         self._btn_export = self._flat_btn(
             bar, "Export HTML Report", self._export_report,
-            bg="#6b47cc", fg="white", active_bg="#4e35a0", state="disabled")
+            bg="#1e8449", fg="white", active_bg="#5e44d4", state="disabled")
         self._btn_export.pack(side="left", padx=(0, 8))
 
         self._btn_clear = self._flat_btn(
             bar, "Reset", self._clear_all,
-            bg=C_PANEL, fg=C_TEXT, active_bg="#222235")
+            bg=C_PANEL, fg=C_TEXT, active_bg="#1a3060")
         self._btn_clear.pack(side="left")
 
         self._lbl_file = tk.Label(bar, text="No file loaded",
@@ -218,7 +265,7 @@ class SmartLogAnalyzerApp(tk.Tk):
                         background=C_PANEL, foreground=C_TEXT_DIM,
                         padding=[14, 6], font=("Segoe UI", 9, "bold"))
         style.map("Dark.TNotebook.Tab",
-                  background=[("selected", C_SURFACE)],
+                  background=[("selected", C_PANEL)],
                   foreground=[("selected", C_ACCENT2)])
 
         self._nb = ttk.Notebook(self, style="Dark.TNotebook")
@@ -323,7 +370,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self.after(0, lambda: self._overlay_step.configure(text=msg))
 
     def _build_status_bar(self):
-        bar = tk.Frame(self, bg=C_SURFACE, height=26)
+        bar = tk.Frame(self, bg=C_PANEL, height=26)
         bar.pack(fill="x", side="bottom")
         bar.pack_propagate(False)
         self._lbl_status = tk.Label(
@@ -1134,7 +1181,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         etl_bar.pack(fill="x")
         self._btn_wu_etl = self._flat_btn(
             etl_bar, "Scan ETL files (Get-WinEvent/tracerpt)", self._run_wu_etl_scan,
-            bg=C_PANEL, fg=C_TEXT, active_bg="#222235", state="disabled")
+            bg=C_PANEL, fg=C_TEXT, active_bg="#1a3060", state="disabled")
         self._btn_wu_etl.pack(side="left")
         self._lbl_wu_etl = tk.Label(
             etl_bar,

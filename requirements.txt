@@ -3,3 +3,4 @@
 # PyInstaller is used for compilation only — not a runtime dependency.
 
 pyinstaller>=6.0
+pillow>=10.0
