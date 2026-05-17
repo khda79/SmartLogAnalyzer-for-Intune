@@ -1,0 +1,5 @@
+# SmartLogAnalyzer for Intune — Python dependencies
+# All core modules use Python stdlib only (tkinter, zipfile, xml, re, etc.)
+# PyInstaller is used for compilation only — not a runtime dependency.
+
+pyinstaller>=6.0
