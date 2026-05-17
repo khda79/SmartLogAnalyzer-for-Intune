@@ -4382,4 +4382,4 @@ class SmartLogAnalyzerApp(tk.Tk):
 
 
 if __name__ == "__main__":
-    App().mainloop()
+    SmartLogAnalyzerApp().mainloop()
