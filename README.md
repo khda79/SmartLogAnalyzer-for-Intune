@@ -104,16 +104,6 @@ dist\SmartLogAnalyzer.exe
 The build script checks Python, installs or verifies PyInstaller, cleans old
 local build outputs, and creates a standalone windowed executable.
 
-### Nuitka
-
-An optional Nuitka build script is also available:
-
-```bat
-build_nuitka.bat
-```
-
-Nuitka requires a working C compiler toolchain.
-
 ## Tests
 
 Parser tests use Python `unittest` and do not require external services.
@@ -188,7 +178,6 @@ SmartLogAnalyzerForIntune/
 |-- SmartLogAnalyzer.py          Main Tkinter application
 |-- LICENSE                      MIT license
 |-- build.bat                    PyInstaller build script
-|-- build_nuitka.bat             Optional Nuitka build script
 |-- requirements.txt             Build/runtime Python dependencies
 |-- logo.ico                     Application icon
 |-- logo.png                     Header logo
