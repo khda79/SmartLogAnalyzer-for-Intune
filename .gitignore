@@ -21,7 +21,7 @@ intune_diag_*/
 intune_cab_*/
 
 # Private working memory between Khaled and Codex
-PRIVATE_MEMORY.md
+memory.local.md
 
 # OS
 Thumbs.db
