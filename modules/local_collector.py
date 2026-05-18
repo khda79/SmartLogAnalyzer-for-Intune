@@ -63,6 +63,8 @@ REGISTRY_KEYS = [
      r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator"),
     ("CloudManagedUpdate",
      r"HKLM\SOFTWARE\Microsoft\CloudManagedUpdate"),
+    ("Win11_Upgrade_Compatibility_Indicators",
+     r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\TargetVersionUpgradeExperienceIndicators"),
     # Named to match zip_handler categorization
     ("CurrentVersion_Uninstall",
      r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),

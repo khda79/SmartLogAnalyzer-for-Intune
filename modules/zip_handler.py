@@ -82,6 +82,9 @@ def _categorize(name):
 
     if re.match(r'^\(\d+\) registrykey', basename):
         # Sub-categorize specific registry keys for fast lookup
+        if ("targetversionupgradeexperienceindicators" in basename or
+                "win11_upgrade_compatibility_indicators" in basename):
+            return "reg_win11_upgrade_indicators"
         if "cloudmanagedupdate" in basename:
             return "reg_cloudmanagedupdate"
         if "currentversion_uninstall" in basename and "wow6432" not in basename:

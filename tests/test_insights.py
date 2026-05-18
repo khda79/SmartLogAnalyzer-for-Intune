@@ -48,6 +48,23 @@ class InsightsTests(unittest.TestCase):
         self.assertTrue(insights.timeline)
         self.assertEqual(insights.wufb.status, "Review recommended")
 
+    def test_build_insights_surfaces_win11_upgrade_blockers(self):
+        indicator = SimpleNamespace(
+            target_version="NI22H2",
+            reason_text="UpEx=Red; SysReqIssue=Tpm",
+        )
+        win11_compat = SimpleNamespace(
+            blocking_indicators=[indicator],
+            to_search_rows=lambda: [("Win11 upgrade", "ERROR", "NI22H2", indicator.reason_text, "Registry")],
+        )
+
+        insights = build_insights(win11_compat=win11_compat)
+
+        self.assertLess(insights.score.score, 100)
+        self.assertTrue(any("Windows 11 upgrade blocked" in item.title
+                            for item in insights.top_actions))
+        self.assertTrue(any(row[0] == "Win11 upgrade" for row in insights.search_rows))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\TargetVersionUpgradeExperienceIndicators\NI22H2]
+"UpEx"="Red"
+"GatedBlockId"="CPUFMS"
+"RedReason"="CpuFms"
+"SysReqIssue"="CpuFms,Tpm"

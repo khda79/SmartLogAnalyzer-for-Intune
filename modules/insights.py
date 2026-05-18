@@ -92,7 +92,7 @@ def _score_status(score):
 
 def build_insights(mdm_parser=None, error_detector=None, compliance_summary=None,
                    wu_parser=None, health_report=None, hardware_parser=None,
-                   evtx_parsers=None, zip_info=None):
+                   evtx_parsers=None, zip_info=None, win11_compat=None):
     actions = []
     causes = []
     timeline = []
@@ -214,6 +214,23 @@ def build_insights(mdm_parser=None, error_detector=None, compliance_summary=None
             actions.append(entry)
             penalty += 7 if entry.severity == "ERROR" else 4
 
+    # Windows 11 upgrade experience indicators
+    for indicator in getattr(win11_compat, "blocking_indicators", []) or []:
+        item = InsightItem(
+            severity="ERROR",
+            title=f"Windows 11 upgrade blocked for {indicator.target_version}",
+            detail=indicator.reason_text,
+            recommendation=(
+                "Review AppCompat TargetVersionUpgradeExperienceIndicators and "
+                "resolve the reported requirement or safeguard hold."
+            ),
+            source="Win11 Upgrade Experience",
+        )
+        actions.append(item)
+        causes.append(item)
+        penalty += 12
+        score_reasons.append(item.title)
+
     score = max(0, min(100, 100 - penalty))
     score_result = ScoreResult(score=score, status=_score_status(score),
                                reasons=_dedupe([InsightItem("INFO", r) for r in score_reasons], 8))
@@ -221,6 +238,8 @@ def build_insights(mdm_parser=None, error_detector=None, compliance_summary=None
     root_causes = _dedupe(sorted(causes, key=lambda x: _sev_rank(x.severity)), 12)
     timeline = sorted(timeline, key=lambda x: x.timestamp or "9999")[:300]
     search_rows = _build_search_rows(top_actions, root_causes, timeline, wufb)
+    if win11_compat and hasattr(win11_compat, "to_search_rows"):
+        search_rows.extend(win11_compat.to_search_rows())
     return InsightBundle(score_result, top_actions, root_causes, timeline, wufb, search_rows)
 
 

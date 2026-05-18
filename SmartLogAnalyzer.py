@@ -43,6 +43,7 @@ from modules.health_analyzer    import HealthAnalyzer
 from modules.analysis_summary   import build_ai_device_summary, build_report_device_summary
 from modules.anonymizer         import export_anonymized_zip
 from modules.insights           import build_insights
+from modules.win11_compat_parser import Win11CompatibilityIndicatorsParser
 
 # Color palette
 C_BG       = "#071527"
@@ -127,6 +128,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         self._wu_etl_thread      = None   # background ETL scan thread
         self._device_parser      = DeviceParser()   # apps, drivers, wifi, autopatch
         self._hardware_parser    = HardwareParser() # battery, firewall, certs
+        self._win11_compat       = Win11CompatibilityIndicatorsParser()
         self._hw_inner_nb        = None             # inner notebook for Hardware & Security
         self._hw_placeholder     = None
         self._ai_analyzer        = AIAnalyzer()     # multi-provider AI
@@ -2016,6 +2018,7 @@ class SmartLogAnalyzerApp(tk.Tk):
             summary  = "?  Script did not run — result unavailable"
             s_color  = C_TEXT_DIM
         self._lbl_win11_summary.configure(text=f"  {summary}", fg=s_color)
+        compat_notes = self._append_win11_compat_indicators()
 
         # ── Notes ──────────────────────────────────────────────────────────
         note_lines = [
@@ -2035,8 +2038,61 @@ class SmartLogAnalyzerApp(tk.Tk):
             ]
         note_lines.append(
             "\nFull script log:\n" + logging)
+        if compat_notes:
+            note_lines.append("\n\n" + "\n".join(compat_notes))
         self._txt_win11_notes.insert("end", "\n".join(note_lines))
         self._txt_win11_notes.configure(state="disabled")
+
+    def _append_win11_compat_indicators(self):
+        """Append AppCompat upgrade indicators to the Win11 readiness tree."""
+        parser = getattr(self, "_win11_compat", None)
+        if not parser or not getattr(parser, "source_file", ""):
+            return [
+                "Upgrade Experience Indicators: no registry export found.",
+                "Run a local collection as administrator to include AppCompat upgrade indicators.",
+            ]
+
+        indicators = getattr(parser, "indicators", []) or []
+        blocking = getattr(parser, "blocking_indicators", []) or []
+        self._tree_win11.insert(
+            "", "end",
+            values=("Upgrade Experience Indicators", "", "", os.path.basename(parser.source_file)),
+            tags=("section",))
+
+        if not indicators:
+            self._tree_win11.insert(
+                "", "end",
+                values=("TargetVersionUpgradeExperienceIndicators",
+                        "?  UNKNOWN", parser.status,
+                        "Registry path exported but no target version entries were found"),
+                tags=("unknown", "even"))
+            return [f"Upgrade Experience Indicators: {parser.status}."]
+
+        base_index = len(self._tree_win11.get_children(""))
+        for offset, indicator in enumerate(indicators):
+            status = "fail" if indicator.is_blocking else "pass"
+            icon = "✗  BLOCKED" if indicator.is_blocking else "✓  CLEAR"
+            self._tree_win11.insert(
+                "", "end",
+                values=(f"Target version {indicator.target_version}",
+                        icon,
+                        indicator.reason_text,
+                        "Windows AppCompat upgrade experience indicator"),
+                tags=(status, "even" if (base_index + offset) % 2 == 0 else "odd"))
+
+        if blocking:
+            self._lbl_win11_summary.configure(
+                text=f"  ✗  NOT CAPABLE — {len(blocking)} upgrade experience blocker(s)",
+                fg=C_ERROR)
+            return [
+                "Upgrade Experience Indicators: blocking condition detected.",
+                *[f"  - TargetVersion={i.target_version}; {i.reason_text}"
+                  for i in blocking],
+            ]
+        return [
+            f"Upgrade Experience Indicators: no blocking condition detected "
+            f"({len(indicators)} target version entrie(s))."
+        ]
 
     def _populate_win11_readiness(self):
         """Evaluate Windows 11 readiness — uses Microsoft's HardwareReadiness.ps1
@@ -2244,6 +2300,7 @@ class SmartLogAnalyzerApp(tk.Tk):
             summary = f"⚠  INCONCLUSIVE — {n_pass}/{n_total} verified, {n_fail} failed"
             s_color = C_WARN
         self._lbl_win11_summary.configure(text=f"  {summary}", fg=s_color)
+        compat_notes = self._append_win11_compat_indicators()
 
         # ── Notes ─────────────────────────────────────────────────────────
         self._txt_win11_notes.insert("end",
@@ -2259,6 +2316,8 @@ class SmartLogAnalyzerApp(tk.Tk):
                 f"OS Build {_os_build_str} — Windows 10 device\n\n"
                 "No critical blockers found based on available data. "
                 "Run PC Health Check on the device for a definitive result.")
+        if compat_notes:
+            self._txt_win11_notes.insert("end", "\n\n" + "\n".join(compat_notes))
         self._txt_win11_notes.configure(state="disabled")
 
     # =========================================================================
@@ -2783,6 +2842,18 @@ class SmartLogAnalyzerApp(tk.Tk):
             self._set_status("Scanning .reg files for WU Group Policy keys...")
             self._wu_parser.parse_policies()
 
+            self._set_status("Parsing Windows 11 upgrade compatibility indicators...")
+            self._win11_compat = Win11CompatibilityIndicatorsParser()
+            win11_compat_file = next(iter(inventory.get("reg_win11_upgrade_indicators", [])), "")
+            if not win11_compat_file:
+                win11_compat_file = (
+                    self._zip_handler.find_file("targetversionupgradeexperienceindicators") or
+                    self._zip_handler.find_file("win11_upgrade_compatibility_indicators") or
+                    ""
+                )
+            if win11_compat_file:
+                self._win11_compat.parse(win11_compat_file)
+
             self._set_status("Evaluating compliance...")
             self._compliance = ComplianceChecker()
             self._compliance_summary = self._compliance.analyse_from_mdm_parser(
@@ -3085,6 +3156,7 @@ class SmartLogAnalyzerApp(tk.Tk):
             hardware_parser=self._hardware_parser,
             evtx_parsers=self._evtx_parsers,
             zip_info=self._zip_info,
+            win11_compat=self._win11_compat,
         )
         self._search_rows = self._build_global_search_rows()
         self._populate_insights()
@@ -4518,6 +4590,7 @@ class SmartLogAnalyzerApp(tk.Tk):
         if self._hw_placeholder and self._hw_placeholder.winfo_exists():
             self._hw_placeholder.pack(padx=16, pady=20)
         self._hardware_parser = HardwareParser()
+        self._win11_compat = Win11CompatibilityIndicatorsParser()
 
         self._txt_summary.configure(state="normal")
         self._txt_summary.delete("1.0", "end")
